@@ -2,6 +2,14 @@ import os
 import unittest
 from hybrid_dict import HybridDict
 
+class SampleClass(HybridDict):
+    def __init__(self, a, b, data=None):
+        data = {} if data is None else data
+        super().__init__(data)
+        self.a = a
+        self.b = b
+
+
 class TestHybridDict(unittest.TestCase):
     def setUp(self):
         os.system('')
@@ -79,6 +87,17 @@ class TestHybridDict(unittest.TestCase):
         self.assertEqual(h.a, 1)
         self.assertEqual(h.d, 4)
 
+    def test_sample_class(self):
+        '''Test a sample class that inherits from HybridDict'''
+        s = SampleClass(1, 2)
+        self.assertEqual(s.a, 1)
+        self.assertEqual(s.b, 2)
+
+        s1 = SampleClass(3, 4, {'c':5, 'd':6})
+        self.assertEqual(s1.a, 3)
+        self.assertEqual(s1.b, 4)
+        self.assertEqual(s1.c, 5)
+        self.assertEqual(s1.d, 6)
 
 
 if __name__ == "__main__":
