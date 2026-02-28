@@ -5,7 +5,8 @@ class Widget(ABC):
     def __init__(self, widget_id, title):
         self.wid = widget_id
         self.title = title
-        
+        self.widget_type = None
+
         if f'{self.wid}_is_expanded' not in st.session_state:
             st.session_state[f'{self.wid}_is_expanded'] = False
 
@@ -40,7 +41,9 @@ class Widget(ABC):
     def run(self):
         actual_expand_state = st.session_state[f'{self.wid}_is_expanded']
 
-        with st.expander(self.title, expanded=actual_expand_state):
+        is_pinned = st.session_state.get("pinned_widget_id") == self.wid
+        title = f'📌 {self.title}' if is_pinned else self.title
+        with st.expander(title, expanded=actual_expand_state):
             self.render_pin_button()
             self.render_inputs()
             st.divider()
@@ -48,6 +51,10 @@ class Widget(ABC):
                 self.render_outputs()
 
 class TextQueryWidget(Widget):
+    def __init__(self, widget_id, title):
+        super().__init__(widget_id, title)
+        self.widget_type = 'query'
+
     def render_inputs(self):
         if st.button("Toggle Full Width", key=f'{self.wid}_sz'):
             st.session_state[f'{self.wid}_is_expanded'] = not st.session_state[f'{self.wid}_is_expanded']
@@ -72,6 +79,10 @@ class TextQueryWidget(Widget):
             }
 
 class RadioSelectionWidget(Widget):
+    def __init__(self, widget_id, title):
+        super().__init__(widget_id, title)
+        self.widget_type = 'transformer'
+
     def render_inputs(self):
         if st.button("Toggle Full Width", key=f'{self.wid}_sz'):
             st.session_state[f'{self.wid}_is_expanded'] = not st.session_state[f'{self.wid}_is_expanded']
@@ -115,11 +126,15 @@ class WidgetManager:
         if "force_grid" not in st.session_state:
             st.session_state.force_grid = False
 
+        if "widget_type_priority" not in st.session_state:
+            st.session_state.widget_type_priority = "query"
+
 
     def get_ordered_widgets(self):
         pinned_id = st.session_state.pinned_widget_id
+        wid_priority = st.session_state.widget_type_priority
 
-        result = sorted(st.session_state.widgets, key=lambda x: (x.wid != pinned_id, int(x.wid[1:])))
+        result = sorted(st.session_state.widgets, key=lambda x: (x.wid != pinned_id, x.widget_type != wid_priority, int(x.wid[1:])))
         return result
 
 
@@ -128,15 +143,29 @@ class WidgetManager:
             st.session_state[f"{widget.wid}_is_expanded"] = False
 
     def render_smart_grid(self):
-        app_title, _, clear_pin, reset_col = st.columns([2, 6, 2, 2])
+        app_title, _, clear_pin, type_priority, collapse_all, reset_col = st.columns([2, 8, 2, 2, 2, 2])
         with app_title:
             st.title("My App")
         with clear_pin:
             if st.button("Clear Pin", use_container_width=True):
                 st.session_state.pinned_widget_id = None
                 st.rerun()
+        with type_priority:
+            label = "Prioritize Queries" if st.session_state.widget_type_priority == "transformer" else "Prioritize Transformers"
+            if st.button(label, use_container_width=True):
+                match st.session_state.widget_type_priority:
+                    case 'query':
+                        st.session_state.widget_type_priority = 'transformer'
+                    case 'transformer':
+                        st.session_state.widget_type_priority = 'query'
+                st.rerun()
+
+        with collapse_all:
+            if st.button("Collapse All", use_container_width=True):
+                self.collapse_all_widgets()
+                st.rerun()
         with reset_col:
-            label = "Restore Custom Layout" if st.session_state.force_grid else "Reset Grid Layout"
+            label = "Unforce Grid Layout" if st.session_state.force_grid else "Force Grid Layout"
             if st.button(label, use_container_width=True):
                 st.session_state.force_grid = not st.session_state.force_grid
                 st.rerun()
@@ -146,8 +175,9 @@ class WidgetManager:
         collapsed_queue = []
 
         for widget in self.get_ordered_widgets():
-            is_expanded = st.session_state[f'{widget.wid}_is_expanded']
             is_pinned = (widget.wid == st.session_state.pinned_widget_id)
+            st.session_state[f'{widget.wid}_is_expanded'] |= is_pinned
+            is_expanded = st.session_state[f'{widget.wid}_is_expanded']
 
             if is_expanded and not st.session_state.force_grid:
                 self._flush_collapsed(collapsed_queue)
